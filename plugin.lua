@@ -40,8 +40,6 @@ function draw()
         local tps = map.TimingPoints
         local notes = map.HitObjects
 
-        currentobject = 0
-
         errors = {}
 
         local i = 1
@@ -82,6 +80,8 @@ function draw()
                 end
             end
         end
+
+        currentobject = 0
         errorstring = ""
 
         for _,note in pairs(errors) do
@@ -91,6 +91,31 @@ function draw()
 
         if errorstring == "" then
             errorstring = "No unsnapped notes detected."
+        end
+
+        showcopytext = false
+    end
+
+    imgui.SameLine(0, 4)
+    if imgui.Button("Detect 1 ms Differences Between Notes") then
+        local notes = map.HitObjects
+        errors = {}
+        for i = 2, #notes do
+            if notes[i].StartTime - notes[i-1].StartTime == 1 then
+                table.insert(errors, notes[i-1])
+            end
+        end
+
+        currentobject = 0
+        errorstring = ""
+
+        for _,note in pairs(errors) do
+            errorstring = errorstring .. note.StartTime .. "|" .. note.Lane .. ", "
+        end
+        errorstring = errorstring:sub(1,-3)
+
+        if errorstring == "" then
+            errorstring = "No 1 ms differences detected."
         end
 
         showcopytext = false
