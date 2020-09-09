@@ -15,11 +15,11 @@ function draw()
 
     local n1 = state.GetValue("n1") or 12
     local n2 = state.GetValue("n2") or 16
-    local leniency = state.GetValue("leniency") or 1
+    local leniency = state.GetValue("leniency") or 0
 
     if n1 < 1 then n1 = 1 end
     if n2 < 1 then n2 = 1 end
-    if leniency < 1 then leniency = 1 end
+    if leniency < 0 then leniency = 0 end
 
     local errorstring = state.GetValue("errorstring") or ""
 
@@ -40,12 +40,10 @@ function draw()
         local tps = map.TimingPoints
         local notes = map.HitObjects
 
-        currentobject = 0
-
         errors = {}
 
         local i = 1
-        for _,tp in pairs(tps) do
+        for _, tp in pairs(tps) do
             local starttime = tp.StartTime
             local length = map.GetTimingPointLength(tp)
             local endtime = starttime + length
@@ -55,11 +53,23 @@ function draw()
             local mspcheck1 = mspb / n1
             local mspcheck2 = mspb / n2
 
-            while endtime > notes[i].StartTime do
-                deviance1 = (notes[i].StartTime - starttime) % mspcheck1
-                deviance2 = (notes[i].StartTime - starttime) % mspcheck2
+            local checktime1 = starttime
+            local checktime2 = starttime
 
-                if not ((deviance1 < leniency) or (mspcheck1 - deviance1 < leniency)) and not ((deviance2 < leniency) or (mspcheck2 - deviance2 < leniency)) then
+            while endtime > notes[i].StartTime do
+                while checktime1 < notes[i].StartTime do
+                    checktime1 = checktime1 + mspcheck1
+                end
+                while checktime2 < notes[i].StartTime do
+                    checktime2 = checktime2 + mspcheck2
+                end
+
+                deviance1 = notes[i].StartTime - math.floor(checktime1)
+                deviance2 = notes[i].StartTime - math.floor(checktime2)
+
+                --debug = not ((math.abs(deviance1) <= leniency) or (math.abs(mspcheck1 - deviance1) <= leniency) or (math.abs(deviance2) <= leniency) or (math.abs(mspcheck2 - deviance2) <= leniency))
+
+                if not ((math.abs(deviance1) <= leniency) or (math.abs(mspcheck1 - deviance1) <= leniency) or (math.abs(deviance2) <= leniency) or (math.abs(mspcheck2 - deviance2) <= leniency)) then
                     table.insert(errors, notes[i])
                 end
 
@@ -70,6 +80,8 @@ function draw()
                 end
             end
         end
+
+        currentobject = 0
         errorstring = ""
 
         for _,note in pairs(errors) do
@@ -79,6 +91,31 @@ function draw()
 
         if errorstring == "" then
             errorstring = "No unsnapped notes detected."
+        end
+
+        showcopytext = false
+    end
+
+    imgui.SameLine(0, 4)
+    if imgui.Button("Detect 1 ms Differences Between Notes") then
+        local notes = map.HitObjects
+        errors = {}
+        for i = 2, #notes do
+            if notes[i].StartTime - notes[i-1].StartTime == 1 then
+                table.insert(errors, notes[i-1])
+            end
+        end
+
+        currentobject = 0
+        errorstring = ""
+
+        for _,note in pairs(errors) do
+            errorstring = errorstring .. note.StartTime .. "|" .. note.Lane .. ", "
+        end
+        errorstring = errorstring:sub(1,-3)
+
+        if errorstring == "" then
+            errorstring = "No 1 ms differences detected."
         end
 
         showcopytext = false
