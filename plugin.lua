@@ -64,10 +64,10 @@ function draw()
                     checktime2 = checktime2 + mspcheck2
                 end
 
-                debug = endtime
-
                 deviance1 = notes[i].StartTime - math.floor(checktime1)
                 deviance2 = notes[i].StartTime - math.floor(checktime2)
+
+                --debug = not ((math.abs(deviance1) <= leniency) or (math.abs(mspcheck1 - deviance1) <= leniency) or (math.abs(deviance2) <= leniency) or (math.abs(mspcheck2 - deviance2) <= leniency))
 
                 if not ((math.abs(deviance1) <= leniency) or (math.abs(mspcheck1 - deviance1) <= leniency) or (math.abs(deviance2) <= leniency) or (math.abs(mspcheck2 - deviance2) <= leniency)) then
                     table.insert(errors, notes[i])
