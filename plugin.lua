@@ -1,185 +1,124 @@
-local function not_has(table, val)
-    for _, value in pairs(table) do
-        if value == val then
-            return false
-        end
-    end
-
-    return true
-end
-
 function draw()
     imgui.Begin("Unsnapped Notes Finder")
-
     state.IsWindowHovered = imgui.IsWindowHovered()
 
-    local n1 = state.GetValue("n1") or 12
-    local n2 = state.GetValue("n2") or 16
-    local leniency = state.GetValue("leniency") or 0
+    local vars = {
+        snaps = "16, 12",
+        leniency = 1,
+        deltaInfo = {},
+        selectedOnly = false
+    }
 
-    if n1 < 1 then n1 = 1 end
-    if n2 < 1 then n2 = 1 end
-    if leniency < 0 then leniency = 0 end
+    getVars(vars)
+    _, vars.snaps = imgui.InputText("Snaps", vars.snaps, 50)
+    vars.snaps = restrictSnapString(vars.snaps)
+    _, vars.leniency = imgui.InputInt("Leniency", vars.leniency)
+    vars.leniency = math.max(vars.leniency, 0) -- no negative numbers
+    _, vars.selectedOnly = imgui.Checkbox("Use selected notes only",
+                                          vars.selectedOnly)
 
-    local errorstring = state.GetValue("errorstring") or ""
-
-    local errors = state.GetValue("errors") or {}
-
-    local currentobject = state.GetValue("currentobject") or 0
-
-    local showcopytext = state.GetValue("showcopytext") or false
-
-    --local debug = state.GetValue("debug") or "hi"
-
-    _, n1 = imgui.InputInt("1/n Snap", n1)
-    _, n2 = imgui.InputInt("1/n Snap ", n2)
-
-    _, leniency = imgui.InputInt("Lenience", leniency)
-
-    if imgui.Button("Search") then
-        local tps = map.TimingPoints
-        local notes = map.HitObjects
-
-        errors = {}
-
-        local i = 1
-        for _, tp in pairs(tps) do
-            local starttime = tp.StartTime
-            local length = map.GetTimingPointLength(tp)
-            local endtime = starttime + length
-            local bpm = tp.Bpm
-            local mspb = 60000/bpm
-
-            local mspcheck1 = mspb / n1
-            local mspcheck2 = mspb / n2
-
-            local checktime1 = starttime
-            local checktime2 = starttime
-
-            while endtime > notes[i].StartTime do
-                while checktime1 < notes[i].StartTime do
-                    checktime1 = checktime1 + mspcheck1
-                end
-                while checktime2 < notes[i].StartTime do
-                    checktime2 = checktime2 + mspcheck2
-                end
-
-                deviance1 = notes[i].StartTime - math.floor(checktime1)
-                deviance2 = notes[i].StartTime - math.floor(checktime2)
-
-                --debug = not ((math.abs(deviance1) <= leniency) or (math.abs(mspcheck1 - deviance1) <= leniency) or (math.abs(deviance2) <= leniency) or (math.abs(mspcheck2 - deviance2) <= leniency))
-
-                if not ((math.abs(deviance1) <= leniency) or (math.abs(mspcheck1 - deviance1) <= leniency) or (math.abs(deviance2) <= leniency) or (math.abs(mspcheck2 - deviance2) <= leniency)) then
-                    table.insert(errors, notes[i])
-                end
-
-                if i < #notes then
-                    i = i + 1
-                else
-                    break
-                end
-            end
+    if imgui.Button("Find") then
+        local snaps = {}
+        for snap in string.gmatch(vars.snaps, "%d+") do
+            table.insert(snaps, tonumber(snap))
         end
-
-        currentobject = 0
-        errorstring = ""
-
-        for _,note in pairs(errors) do
-            errorstring = errorstring .. note.StartTime .. "|" .. note.Lane .. ", "
-        end
-        errorstring = errorstring:sub(1,-3)
-
-        if errorstring == "" then
-            errorstring = "No unsnapped notes detected."
-        end
-
-        showcopytext = false
+        local notes = vars.selectedOnly and state.SelectedHitObjects or
+                          map.HitObjects
+        vars.deltaInfo = findAllDeltas(snaps, notes, vars.leniency)
     end
 
-    imgui.SameLine(0, 4)
-    if imgui.Button("Detect 1 ms Differences Between Notes") then
-        local notes = map.HitObjects
-        errors = {}
-        for i = 2, #notes do
-            if notes[i].StartTime - notes[i-1].StartTime == 1 then
-                table.insert(errors, notes[i-1])
-            end
-        end
-
-        currentobject = 0
-        errorstring = ""
-
-        for _,note in pairs(errors) do
-            errorstring = errorstring .. note.StartTime .. "|" .. note.Lane .. ", "
-        end
-        errorstring = errorstring:sub(1,-3)
-
-        if errorstring == "" then
-            errorstring = "No 1 ms differences detected."
-        end
-
-        showcopytext = false
+    if #vars.deltaInfo == 0 then
+        imgui.Text("No notes to resnap")
+    else
+        imgui.Text(#vars.deltaInfo .. " unsnapped notes found!")
+        printTable(vars.deltaInfo)
     end
 
-    if errors[1] then
-        imgui.Text("")
-        --imgui.Columns(3)
-        if imgui.Button("Go to Previous Object") then
-            if currentobject > 1 then
-                currentobject = currentobject - 1
-            else
-                currentobject = #errors
-            end
-            actions.GoToObjects(errors[currentobject].StartTime .. "|" .. errors[currentobject].Lane)
-            showcopytext = false
-        end
-
-
-        imgui.SameLine(0, 4)
-        --imgui.separator()
-        --imgui.NextColumn()
-        if imgui.Button("Go to Next Object") then
-            if currentobject < #errors then
-                currentobject = currentobject + 1
-            else
-                currentobject = 1
-            end
-            actions.GoToObjects(errors[currentobject].StartTime .. "|" .. errors[currentobject].Lane)
-            showcopytext = false
-        end
-
-        imgui.SameLine(0, 4)
-        --imgui.NextColumn()
-        if imgui.Button("Copy to Clipboard") then
-            imgui.SetClipboardText(errorstring)
-            showcopytext = true
-        end
-
-        --imgui.Columns(1)
-
-        imgui.TextWrapped(currentobject .. "/" .. #errors)
-        if showcopytext then
-            imgui.SameLine(0,4)
-            imgui.TextWrapped("Copied!")
-        end
-    end
-
-    imgui.TextWrapped(errorstring)
-
-    --imgui.TextWrapped(debug)
-
-    state.SetValue("n1", n1)
-    state.SetValue("n2", n2)
-    state.SetValue("leniency", leniency)
-
-    state.SetValue("errorstring", errorstring)
-    state.SetValue("errors", errors)
-
-    state.SetValue("currentobject", currentobject)
-
-    state.SetValue("showcopytext", showcopytext)
-
-    --state.SetValue("debug", debug)
-
+    saveVars(vars)
     imgui.End()
+end
+
+function restrictSnapString(s)
+    local patterns = {
+        {"[^0123456789,]"}, -- only allow digits and commas
+        {",,+", ","}, -- remove duplicate commas
+        {"^,"}, -- remove commas at beginning
+        {",$"} -- remove commas at end
+    }
+    for _, pattern in pairs(patterns) do
+        s = string.gsub(s, pattern[1], pattern[2] or "")
+    end
+    return s
+end
+
+function diffToClosestSnap(time, snaps)
+    local timingPoint = map.GetTimingPointAt(time)
+    local msPerSnaps = {}
+    for _, snap in pairs(snaps) do
+        table.insert(msPerSnaps, 60000 / timingPoint.Bpm / snap)
+    end
+
+    local smallestDelta = 10e6
+    for _, msPerSnap in pairs(msPerSnaps) do
+        local deltaForward = (time - timingPoint.StartTime) % msPerSnap
+        local deltaBackward = deltaForward - msPerSnap
+        local delta = deltaForward < -deltaBackward and deltaForward or
+                          deltaBackward
+
+        if math.abs(delta) < math.abs(smallestDelta) then
+            smallestDelta = delta;
+        end
+    end
+
+    return smallestDelta
+end
+
+function findAllDeltas(snaps, notes, leniency)
+    local deltaInfo = {}
+    for _, note in pairs(notes) do
+        local startTimeDelta = diffToClosestSnap(note.StartTime, snaps)
+        local endTimeDelta = note.EndTime > 0 and
+                                 diffToClosestSnap(note.EndTime, snaps) or 0
+        if math.abs(startTimeDelta) >= leniency or math.abs(endTimeDelta) >=
+            leniency then
+            table.insert(deltaInfo, {
+                note = note,
+                startTimeDelta = startTimeDelta,
+                endTimeDelta = endTimeDelta
+            })
+        end
+    end
+    return deltaInfo
+end
+
+function printTable(deltaInfo)
+    imgui.Columns(3)
+    imgui.Text("Note")
+    imgui.NextColumn()
+    imgui.Text("StartTime Delta")
+    imgui.NextColumn()
+    imgui.Text("EndTime Delta")
+    imgui.NextColumn()
+    imgui.Separator()
+    for _, info in pairs(deltaInfo) do
+        local noteString = info.note.StartTime .. "|" .. info.note.Lane
+        if imgui.Button(noteString) then actions.GoToObjects(noteString) end
+        imgui.NextColumn()
+        imgui.Text(info.startTimeDelta == 0 and "" or
+                       string.format("%.2f", info.startTimeDelta))
+        imgui.NextColumn()
+        imgui.Text(info.endTimeDelta == 0 and "" or
+                       string.format("%.2f", info.endTimeDelta))
+        imgui.NextColumn()
+    end
+    imgui.Separator()
+    imgui.Columns(1)
+end
+
+function getVars(vars)
+    for key in pairs(vars) do vars[key] = state.GetValue(key) or vars[key] end
+end
+
+function saveVars(vars)
+    for key in pairs(vars) do state.SetValue(key, vars[key]) end
 end
