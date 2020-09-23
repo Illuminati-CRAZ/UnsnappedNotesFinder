@@ -1,4 +1,9 @@
+ITEM_WIDTH = 200
+WINDOW_WIDTH = 275
+
 function draw()
+
+    imgui.SetNextWindowSizeConstraints({WINDOW_WIDTH, 0}, {WINDOW_WIDTH, 4000})
     imgui.Begin("Unsnapped Notes Finder")
     state.IsWindowHovered = imgui.IsWindowHovered()
 
@@ -10,14 +15,23 @@ function draw()
     }
 
     getVars(vars)
+
+    imgui.PushItemWidth(ITEM_WIDTH)
+
     _, vars.snaps = imgui.InputText("Snaps", vars.snaps, 50)
     vars.snaps = restrictSnapString(vars.snaps)
+
     _, vars.leniency = imgui.InputInt("Leniency", vars.leniency)
     vars.leniency = math.max(vars.leniency, 0) -- no negative numbers
+
     _, vars.selectedOnly = imgui.Checkbox("Use selected notes only",
                                           vars.selectedOnly)
 
-    if imgui.Button("Find") then
+    imgui.PopItemWidth()
+
+    imgui.Dummy({0, 5})
+
+    if imgui.Button("Find", {ITEM_WIDTH, 24}) then
         local snaps = {}
         for snap in string.gmatch(vars.snaps, "%d+") do
             table.insert(snaps, tonumber(snap))
@@ -26,6 +40,8 @@ function draw()
                           map.HitObjects
         vars.deltaInfo = findAllDeltas(snaps, notes, vars.leniency)
     end
+
+    imgui.Dummy({0, 5})
 
     if #vars.deltaInfo == 0 then
         imgui.Text("No notes to resnap")
@@ -58,7 +74,7 @@ function diffToClosestSnap(time, snaps)
         table.insert(msPerSnaps, 60000 / timingPoint.Bpm / snap)
     end
 
-    local smallestDelta = 10e6
+    local smallestDelta = 10e6 -- change to map.TrackLength when Quaver v0.25.0 rolls out
     for _, msPerSnap in pairs(msPerSnaps) do
         local deltaForward = (time - timingPoint.StartTime) % msPerSnap
         local deltaBackward = deltaForward - msPerSnap
@@ -92,27 +108,38 @@ function findAllDeltas(snaps, notes, leniency)
 end
 
 function printTable(deltaInfo)
-    imgui.Columns(3)
-    imgui.Text("Note")
-    imgui.NextColumn()
-    imgui.Text("StartTime Delta")
-    imgui.NextColumn()
-    imgui.Text("EndTime Delta")
-    imgui.NextColumn()
-    imgui.Separator()
-    for _, info in pairs(deltaInfo) do
-        local noteString = info.note.StartTime .. "|" .. info.note.Lane
-        if imgui.Button(noteString) then actions.GoToObjects(noteString) end
-        imgui.NextColumn()
-        imgui.Text(info.startTimeDelta == 0 and "" or
-                       string.format("%.2f", info.startTimeDelta))
-        imgui.NextColumn()
-        imgui.Text(info.endTimeDelta == 0 and "" or
-                       string.format("%.2f", info.endTimeDelta))
+    function tableHeaderCell(title)
+        imgui.SetColumnWidth(-1, WINDOW_WIDTH / imgui.GetColumnsCount())
+        imgui.Text(title)
         imgui.NextColumn()
     end
+
+    function tableButtonCell(note)
+        local noteString = note.StartTime .. "|" .. note.Lane
+        if imgui.Button(noteString) then actions.GoToObjects(noteString) end
+        imgui.NextColumn()
+    end
+
+    function tableCell(value)
+        imgui.Text(value == 0 and "" or string.format("%.2f", value))
+        imgui.NextColumn()
+    end
+
+    imgui.Columns(3)
     imgui.Separator()
+    tableHeaderCell("Note")
+    tableHeaderCell("StartDelta")
+    tableHeaderCell("EndDelta")
+    imgui.Separator()
+
+    for _, info in pairs(deltaInfo) do
+        tableButtonCell(info.note)
+        tableCell(info.startTimeDelta)
+        tableCell(info.endTimeDelta)
+    end
+
     imgui.Columns(1)
+    imgui.Separator()
 end
 
 function getVars(vars)
