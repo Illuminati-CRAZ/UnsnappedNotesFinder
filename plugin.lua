@@ -70,8 +70,8 @@ end
 function diffToClosestSnap(time, snaps)
     local timingPoint = map.GetTimingPointAt(time)
     local msPerSnaps = {}
-    for _, snap in pairs(snaps) do
-        table.insert(msPerSnaps, 60000 / timingPoint.Bpm / snap)
+    for i, snap in pairs(snaps) do
+        msPerSnaps[i] = 60000 / timingPoint.Bpm / snap
     end
 
     local smallestDelta = 10e6 -- change to map.TrackLength when Quaver v0.25.0 rolls out
@@ -91,17 +91,17 @@ end
 
 function findAllDeltas(snaps, notes, leniency)
     local deltaInfo = {}
-    for _, note in pairs(notes) do
+    for i, note in pairs(notes) do
         local startTimeDelta = diffToClosestSnap(note.StartTime, snaps)
         local endTimeDelta = note.EndTime > 0 and
                                  diffToClosestSnap(note.EndTime, snaps) or 0
         if math.abs(startTimeDelta) >= leniency or math.abs(endTimeDelta) >=
             leniency then
-            table.insert(deltaInfo, {
+            deltaInfo[i] = {
                 note = note,
                 startTimeDelta = startTimeDelta,
                 endTimeDelta = endTimeDelta
-            })
+            }
         end
     end
     return deltaInfo
